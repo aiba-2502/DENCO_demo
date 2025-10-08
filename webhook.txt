@@ -1,0 +1,82 @@
+# FAX Webhook API仕様
+
+## 1. 受信FAX Webhook (インバウンド)
+
+エンドポイント: POST /api/fax/webhook/inbound
+
+### リクエストヘッダー
+```
+Content-Type: multipart/form-data
+Authorization: Bearer {API_KEY}
+```
+
+### リクエストボディ
+- fax_id: string (必須) - FAX送信のユニークID
+- sender_number: string (必須) - 送信元FAX番号
+- receiver_number: string (必須) - 受信FAX番号
+- pages: number (必須) - ページ数
+- timestamp: string (必須) - 受信日時 (ISO 8601形式)
+- tiff_file: file (必須) - FAX画像データ (TIFF形式)
+
+### レスポンス
+```json
+{
+  "status": "success",
+  "message": "FAX received successfully",
+  "document_id": "uuid"
+}
+```
+
+## 2. 送信FAX Webhook (アウトバウンド)
+
+エンドポイント: POST {EXTERNAL_APP_ENDPOINT}/fax/send
+
+### リクエストヘッダー
+```
+Content-Type: multipart/form-data
+Authorization: Bearer {EXTERNAL_APP_API_KEY}
+```
+
+### リクエストボディ
+- fax_id: string (必須) - FAX送信のユニークID
+- sender_number: string (必須) - 送信元FAX番号
+- receiver_number: string (必須) - 送信先FAX番号
+- pdf_file: file (必須) - 送信するPDFファイル
+
+### レスポンス
+```json
+{
+  "status": "success",
+  "message": "FAX queued for sending",
+  "job_id": "string"
+}
+```
+
+## 3. 送信状態通知Webhook (アウトバウンド状態更新)
+
+エンドポイント: POST /api/fax/webhook/status
+
+### リクエストヘッダー
+```
+Content-Type: application/json
+Authorization: Bearer {API_KEY}
+```
+
+### リクエストボディ
+```json
+{
+  "fax_id": "string",
+  "job_id": "string",
+  "status": "completed|failed",
+  "timestamp": "ISO8601 string",
+  "error_message": "string (オプション)"
+}
+```
+
+### レスポンス
+```json
+{
+  "status": "success",
+  "message": "Status updated successfully"
+}
+```
