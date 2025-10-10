@@ -1,0 +1,159 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>着信通知テスト（デバッグ版）</title>
+    <meta charset="UTF-8">
+    <style>
+        body { font-family: monospace; padding: 20px; }
+        #messages {
+            border: 1px solid #ccc;
+            height: 400px;
+            overflow-y: scroll;
+            padding: 10px;
+            background: #f5f5f5;
+        }
+        .message {
+            margin: 5px 0;
+            padding: 5px;
+            background: white;
+            border-left: 3px solid #4CAF50;
+        }
+        .call_started { border-left-color: #2196F3; }
+        .call_ended { border-left-color: #f44336; }
+        .dtmf_received { border-left-color: #FF9800; }
+        .debug { border-left-color: #9C27B0; background: #f0f0f0; }
+        button { padding: 10px 20px; margin: 10px 5px 10px 0; }
+        #debugLog {
+            border: 1px solid #666;
+            height: 200px;
+            overflow-y: scroll;
+            padding: 10px;
+            background: #1e1e1e;
+            color: #00ff00;
+            font-size: 12px;
+            margin-top: 20px;
+        }
+    </style>
+</head>
+<body>
+    <h1>📞 着信通知テスト（デバッグ版）</h1>
+    <button onclick="connect()">接続</button>
+    <button onclick="disconnect()">切断</button>
+    <button onclick="clearMessages()">クリア</button>
+    <button onclick="testMessage()">テストメッセージ送信</button>
+    <div id="status">未接続</div>
+    <h2>受信メッセージ:</h2>
+    <div id="messages"></div>
+    <h2>デバッグログ:</h2>
+    <div id="debugLog"></div>
+
+    <script>
+        let ws = null;
+        const messagesDiv = document.getElementById('messages');
+        const statusDiv = document.getElementById('status');
+        const debugLog = document.getElementById('debugLog');
+
+        function log(message) {
+            const time = new Date().toLocaleTimeString();
+            const logEntry = document.createElement('div');
+            logEntry.textContent = `[${time}] ${message}`;
+            debugLog.insertBefore(logEntry, debugLog.firstChild);
+            console.log(`[DEBUG] ${message}`);
+        }
+
+        function connect() {
+            log('接続開始: ws://localhost:3001/ws/frontend');
+            ws = new WebSocket('ws://localhost:3001/ws/frontend');
+
+            ws.onopen = () => {
+                log('✅ WebSocket接続成功');
+                statusDiv.innerHTML = '✅ 接続中';
+                statusDiv.style.color = 'green';
+                addMessage('connected', { message: 'WebSocket接続成功' });
+            };
+
+            ws.onmessage = (event) => {
+                log('メッセージ受信: ' + event.data.substring(0, 100));
+                try {
+                    const data = JSON.parse(event.data);
+                    log(`解析成功: type=${data.type}`);
+                    addMessage(data.type, data);
+                } catch (e) {
+                    log('❌ JSON解析エラー: ' + e.message);
+                    console.error('Parse error:', e, 'Data:', event.data);
+                }
+            };
+
+            ws.onclose = () => {
+                log('❌ WebSocket切断');
+                statusDiv.innerHTML = '❌ 切断';
+                statusDiv.style.color = 'red';
+            };
+
+            ws.onerror = (error) => {
+                log('⚠️ WebSocketエラー発生');
+                statusDiv.innerHTML = '⚠️ エラー';
+                statusDiv.style.color = 'orange';
+                console.error('WebSocket error:', error);
+            };
+        }
+
+        function disconnect() {
+            if (ws) {
+                log('切断実行');
+                ws.close();
+                ws = null;
+            }
+        }
+
+        function testMessage() {
+            log('テストメッセージを追加');
+            addMessage('call_started', {
+                callId: 'test-123',
+                callerNumber: '08012345678',
+                calledNumber: 's',
+                timestamp: new Date().toISOString()
+            });
+        }
+
+        function addMessage(type, data) {
+            log(`addMessage実行: type=${type}`);
+            const div = document.createElement('div');
+            div.className = `message ${type}`;
+
+            const time = new Date().toLocaleTimeString();
+            let content = `[${time}] ${type}: ${JSON.stringify(data, null, 2)}`;
+
+            // 着信の場合は見やすく
+            if (type === 'call_started') {
+                log('📞 着信メッセージをフォーマット中');
+                content = `[${time}] 📞 着信！
+発信者: ${data.callerNumber}
+着信番号: ${data.calledNumber}
+通話ID: ${data.callId}`;
+            } else if (type === 'call_ended') {
+                log('📴 通話終了メッセージをフォーマット中');
+                content = `[${time}] 📴 通話終了
+通話ID: ${data.callId}
+通話時間: ${(data.duration / 1000).toFixed(1)}秒`;
+            } else if (type === 'dtmf_received') {
+                log('🔢 DTMFメッセージをフォーマット中');
+                content = `[${time}] 🔢 DTMF受信: ${data.digit}`;
+            }
+
+            div.textContent = content;
+            messagesDiv.insertBefore(div, messagesDiv.firstChild);
+            log('メッセージ表示完了');
+        }
+
+        function clearMessages() {
+            messagesDiv.innerHTML = '';
+            debugLog.innerHTML = '';
+            log('メッセージクリア完了');
+        }
+
+        // ページロード時のログ
+        log('ページ読み込み完了');
+    </script>
+</body>
+</html>

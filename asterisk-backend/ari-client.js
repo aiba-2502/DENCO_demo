@@ -181,7 +181,8 @@ class AriClient extends EventEmitter {
 
     try {
       // アプリケーションを起動（WebSocketサブスクリプション）
-      this.client.start(config.asterisk.appName);
+      // start()はPromiseを返すので、awaitで完了を待つ
+      await this.client.start(config.asterisk.appName);
       logger.info(`Stasisアプリケーション起動: ${config.asterisk.appName}`);
     } catch (error) {
       logger.error('Stasisアプリケーション起動エラー', { error: error.message });

@@ -276,9 +276,10 @@ class WebSocketManager {
       }
     });
 
-    logger.debug('フロントエンドブロードキャスト', {
+    logger.info('フロントエンドブロードキャスト', {
       type: data.type,
       recipients: successCount,
+      totalConnections: this.frontendConnections.size,
     });
   }
 

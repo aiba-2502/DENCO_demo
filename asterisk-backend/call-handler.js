@@ -41,7 +41,7 @@ class CallHandler {
    */
   async handleIncomingCall(event, channel) {
     const channelId = channel.id;
-    const callerNumber = channel.caller.number;
+    const callerNumber = channel.caller.number || 'Unknown';
     const calledNumber = channel.dialplan?.exten || 'unknown';
 
     logger.info('着信処理開始', {
@@ -50,24 +50,33 @@ class CallHandler {
       calledNumber,
     });
 
+    // 通話セッションIDの生成
+    const callId = uuidv4();
+
+    // まず通話情報を保存（Pythonバックエンドなしでも動作）
+    this.activeCalls.set(channelId, {
+      callId,
+      channelId,
+      callerNumber,
+      calledNumber,
+      startTime: new Date(),
+      sessionData: null,
+      status: 'ringing',
+    });
+
+    // フロントエンドに通話開始を通知（最優先）
+    this.wsManager.broadcastToFrontend({
+      type: 'call_started',
+      callId,
+      channelId,
+      callerNumber,
+      calledNumber,
+      timestamp: new Date().toISOString(),
+    });
+
+    logger.info('着信通知送信完了', { callId, channelId });
+
     try {
-      // 通話セッションIDの生成
-      const callId = uuidv4();
-
-      // Pythonバックエンドに通話セッション作成リクエスト
-      const sessionData = await this.createCallSession(callId, callerNumber, calledNumber);
-
-      // 通話情報を保存
-      this.activeCalls.set(channelId, {
-        callId,
-        channelId,
-        callerNumber,
-        calledNumber,
-        startTime: new Date(),
-        sessionData,
-        status: 'ringing',
-      });
-
       // チャンネルに応答
       await this.ariClient.answerChannel(channelId);
 
@@ -76,21 +85,24 @@ class CallHandler {
       callInfo.status = 'answered';
       this.activeCalls.set(channelId, callInfo);
 
-      // 挨拶メッセージの再生（オプション）
-      // await this.playGreeting(channelId, sessionData.tenant_id);
+      // Pythonバックエンドに通話セッション作成リクエスト（オプショナル）
+      try {
+        const sessionData = await this.createCallSession(callId, callerNumber, calledNumber);
+        callInfo.sessionData = sessionData;
+        this.activeCalls.set(channelId, callInfo);
 
-      // WebSocket接続をPythonバックエンドに確立
-      await this.establishPythonWebSocket(callId, channelId);
+        // WebSocket接続をPythonバックエンドに確立
+        await this.establishPythonWebSocket(callId, channelId);
 
-      // フロントエンドに通話開始を通知
-      this.wsManager.broadcastToFrontend({
-        type: 'call_started',
-        callId,
-        channelId,
-        callerNumber,
-        calledNumber,
-        timestamp: new Date().toISOString(),
-      });
+        logger.info('Pythonバックエンド連携成功', { callId, channelId });
+      } catch (backendError) {
+        logger.warn('Pythonバックエンド連携スキップ（起動していない可能性）', {
+          callId,
+          channelId,
+          error: backendError.message,
+        });
+        // Pythonバックエンドのエラーは致命的ではないので続行
+      }
 
       logger.info('着信処理完了', { callId, channelId });
     } catch (error) {
@@ -104,7 +116,7 @@ class CallHandler {
       try {
         await this.ariClient.hangupChannel(channelId, 'congestion');
       } catch (hangupError) {
-        logger.error('チャンネル切断エラー', { error: hangupError.message });
+        logger.error('チャンネル切断エラー', { channelId, error: hangupError.message });
       }
     }
   }
